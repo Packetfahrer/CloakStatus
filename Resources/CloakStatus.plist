@@ -469,6 +469,48 @@
         <key>PostNotification</key>
         <string>jp.r-plus.cloakstatus.settingschanged</string>
       </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSSwitchCell</string>
+        <key>default</key>
+        <true/>
+        <key>defaults</key>
+        <string>jp.r-plus.CloakStatus</string>
+        <key>key</key>
+        <string>QuietModeInactive (Left/Right)</string>
+        <key>label</key>
+        <string>QuietModeInactive</string>
+        <key>PostNotification</key>
+        <string>jp.r-plus.cloakstatus.settingschanged</string>
+        <key>pl_filter</key>
+        <dict>
+          <key>CoreFoundationVersion</key>
+          <array>
+            <string>847.20</string>
+          </array>
+        </dict>
+      </dict>
+      <dict>
+        <key>cell</key>
+        <string>PSSwitchCell</string>
+        <key>default</key>
+        <true/>
+        <key>defaults</key>
+        <string>jp.r-plus.CloakStatus</string>
+        <key>key</key>
+        <string>TetheringCC (Left/Right)</string>
+        <key>label</key>
+        <string>TetheringConnectionCount</string>
+        <key>PostNotification</key>
+        <string>jp.r-plus.cloakstatus.settingschanged</string>
+        <key>pl_filter</key>
+        <dict>
+          <key>CoreFoundationVersion</key>
+          <array>
+            <string>847.20</string>
+          </array>
+        </dict>
+      </dict>
     </array>
   </dict>
 </plist>

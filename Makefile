@@ -1,6 +1,8 @@
 ARCHS = armv7
 TARGET = iphone:clang::4.0
-include theos/makefiles/common.mk
+THEOS_DEVICE_IP = 192.168.1.112
+
+include ./theos/makefiles/common.mk
 
 TWEAK_NAME = CloakStatus
 CloakStatus_FILES = Tweak.xm
@@ -12,7 +14,6 @@ CloakStatusSettings_FILES = Preference.m
 CloakStatusSettings_INSTALL_PATH = /Library/PreferenceBundles
 # CloakStatusSettings_FRAMEWORKS = UIKit 
 CloakStatusSettings_PRIVATE_FRAMEWORKS = Preferences
-CloakStatusSettings_LIBRARIES = prefs
 
 include $(THEOS_MAKE_PATH)/bundle.mk
 

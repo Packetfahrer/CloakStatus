@@ -1,4 +1,4 @@
-#import <filterPrefs.h>
+#import <Preferences/Preferences.h>
 
 __attribute__((visibility("hidden")))
 @interface CloakStatusPSController : PSListController
@@ -9,7 +9,7 @@ __attribute__((visibility("hidden")))
 - (id)specifiers
 {
     if (!_specifiers) {
-        _specifiers = FilteredSpecifiers([[self loadSpecifiersFromPlistName:@"CloakStatus" target:self] retain]);
+		_specifiers = [[self loadSpecifiersFromPlistName:@"CloakStatus" target:self] retain];
     }
     return _specifiers;
 }

@@ -1,9 +1,12 @@
-#import <UIKit/UIKit.h>
+#import <objc/runtime.h>
 #import "Firmware.h"
-#import <debug.h>
+
+#ifndef kCFCoreFoundationVersionNumber_iOS_7_0
+#define kCFCoreFoundationVersionNumber_iOS_7_0 847.20
+#endif
 
 typedef struct { 
-    BOOL itemIsEnabled[24]; 
+    BOOL itemIsEnabled[25]; 
     BOOL timeString[64]; 
     int gsmSignalStrengthRaw; 
     int gsmSignalStrengthBars; 
@@ -23,28 +26,36 @@ typedef struct {
     unsigned int thermalSunlightMode : 1;  
     unsigned int slowActivity : 1;  
     unsigned int syncActivity : 1;  
-    BOOL activityDisplayId[256]; 
-    unsigned int bluetoothConnected : 1;  
-    unsigned int displayRawGSMSignal : 1;  
-    unsigned int displayRawWifiSignal : 1;  
-    unsigned int locationIconType : 1;  
+    BOOL activityDisplayId[256];
+    unsigned int bluetoothConnected : 1; 
+    unsigned int displayRawGSMSignal : 1; 
+    unsigned int displayRawWifiSignal : 1; 
+    unsigned int locationIconType : 1; 
+    unsigned int quietModeInactive : 1;// iOS 7+
+    unsigned int tetheringConnectionCount;// iOS 7+
 } _rawData;
 
 
-@interface SBStatusBarDataManager : NSObject
+@interface SBStatusBarStateAggregator : NSObject
 + (id)sharedDataManager;
 - (void)_updateTimeString;
 - (void)setStatusBarItem:(int)item enabled:(BOOL)enabled;
 - (void)updateStatusBarItem:(int)item;
+
+- (void)_updateTimeItems;
+- (void)_setItem:(int)item enabled:(BOOL)enabled;
++ (id)sharedInstance;// iOS 7+
 @end
 
 @interface UIStatusBarItem
 @property(readonly, assign, nonatomic) NSString *indicatorName;
 @property(readonly) int type;
-- (id)indicatorName;  
+- (id)indicatorName;
 - (id)itemWithType:(int)type;
 - (NSString *)description;
 + (BOOL)typeIsValid:(NSInteger)arg1;
+
++ (id)itemWithType:(int)arg1 idiom:(int)arg2;// iOS 7+
 @end
 
 @interface UIStatusBarItemView
@@ -55,6 +66,7 @@ typedef struct {
 @interface UIStatusBarComposedData : NSObject
 - (_rawData *)rawData;
 @end
+
 
 static BOOL isBootup;
 static BOOL isDateTimeStatusBar;
@@ -87,6 +99,8 @@ static BOOL isVpnEnabled;
 static BOOL isCallForwardEnabled;
 static BOOL isActivityEnabled;
 static BOOL isThermalColorEnabled;
+static BOOL isQuietModeInactiveEnabled;// iOS 7+
+static BOOL isTetheringCCEnabled;// iOS 7+
 
 static NSString *kTimeKey = @"Time (Center)";
 static NSString *kLockKey = @"Lock:Lock (Center)";// iOS 4-5
@@ -115,6 +129,8 @@ static NSString *kVpnKey = @"Indicator:VPN (Left/Right)";
 static NSString *kCallForwardKey = @"Indicator:CallForward (Left/Right)";
 static NSString *kActivityKey = @"Activity (Left/Right)";
 static NSString *kThermalColorKey = @"ThermalColor (Left/Right)";
+static NSString *kQuietModeInactiveKey = @"QuietModeInactive (Left/Right)";// iOS 7+
+static NSString *kTetheringCCKey = @"TetheringCC (Left/Right)";// iOS 7+
 
 // http://stackoverflow.com/questions/7989864/watching-memory-usage-in-ios
 #import <mach/mach.h>
@@ -161,41 +177,52 @@ static inline BOOL isDisabledStatus(UIStatusBarItem *item)
 {
     NSString *iconName = IconNameFromItem(item);
     // NOTE: Activitys are NetworkActivity, iTunesSyncActivity.
-    if (!isTimeEnabled             && [iconName isEqualToString:kTimeKey]) { return YES; }
-    if (!isLockEnabled             && [iconName isEqualToString:kLockKey]) { return YES; }
-    if (!isQuitEnabled             && [iconName isEqualToString:kQuitKey]) { return YES; }
-    if (!isAirplaneEnabled         && [iconName isEqualToString:kAirplaneKey]) { return YES; }
-    if (!isSignalEnabled           && [iconName isEqualToString:kSignalKey]) { return YES; }
-    if (!isServiceEnabled          && [iconName isEqualToString:kServiceKey]) { return YES; }
-    if (!isDataEnabled             && [iconName isEqualToString:kDataKey]) { return YES; }
-    if (!isBatteryEnabled          && [iconName isEqualToString:kBatteryKey]) { return YES; }
-    if (!isBatteryPercentEnabled   && [iconName isEqualToString:kBatteryPercentKey]) { return YES; }
+    if (!isTimeEnabled              && [iconName isEqualToString:kTimeKey]) { return YES; }
+    if (!isLockEnabled              && [iconName isEqualToString:kLockKey]) { return YES; }
+    if (!isQuitEnabled              && [iconName isEqualToString:kQuitKey]) { return YES; }
+    if (!isAirplaneEnabled          && [iconName isEqualToString:kAirplaneKey]) { return YES; }
+    if (!isSignalEnabled            && [iconName isEqualToString:kSignalKey]) { return YES; }
+    if (!isServiceEnabled           && [iconName isEqualToString:kServiceKey]) { return YES; }
+    if (!isDataEnabled              && [iconName isEqualToString:kDataKey]) { return YES; }
+    if (!isBatteryEnabled           && [iconName isEqualToString:kBatteryKey]) { return YES; }
+    if (!isBatteryPercentEnabled    && [iconName isEqualToString:kBatteryPercentKey]) { return YES; }
     //if (!isNotChargingEnabled      && [iconName isEqualToString:kNotChargingKey]) { return YES; }
-    if (!isBluetoothBatteryEnabled && [iconName isEqualToString:kBluetoothBatteryKey]) { return YES; }
-    if (!isBluetoothEnabled        && [iconName isEqualToString:kBluetoothKey]) { return YES; }
-    if (!isTtyEnabled              && [iconName isEqualToString:kTtyKey]) { return YES; }
-    if (!isAlarmEnabled            && [iconName isEqualToString:kAlarmKey]) { return YES; }
-    if (!isPlusEnabled             && [iconName isEqualToString:kPlusKey]) { return YES; }
-    if (!isPlayEnabled             && [iconName isEqualToString:kPlayKey]) { return YES; }
-    if (!isLocationEnabled         && [iconName isEqualToString:kLocationObsoleteKey]) { return YES; }
-    if (!isLocationEnabled         && [iconName isEqualToString:kLocationKey]) { return YES; }
-    if (!isRotationLockEnabled     && [iconName isEqualToString:kRotationLockKey]) { return YES; }
+    if (!isBluetoothBatteryEnabled  && [iconName isEqualToString:kBluetoothBatteryKey]) { return YES; }
+    if (!isBluetoothEnabled         && [iconName isEqualToString:kBluetoothKey]) { return YES; }
+    if (!isTtyEnabled               && [iconName isEqualToString:kTtyKey]) { return YES; }
+    if (!isAlarmEnabled             && [iconName isEqualToString:kAlarmKey]) { return YES; }
+    if (!isPlusEnabled              && [iconName isEqualToString:kPlusKey]) { return YES; }
+    if (!isPlayEnabled              && [iconName isEqualToString:kPlayKey]) { return YES; }
+    if (!isLocationEnabled          && [iconName isEqualToString:kLocationObsoleteKey]) { return YES; }
+    if (!isLocationEnabled          && [iconName isEqualToString:kLocationKey]) { return YES; }
+    if (!isRotationLockEnabled      && [iconName isEqualToString:kRotationLockKey]) { return YES; }
     //if (!isDoubleHeightEnabled     && [iconName isEqualToString:kDoubleHeightKey]) { return YES; }
-    if (!isAirPlayEnabled          && [iconName isEqualToString:kAirPlayKey]) { return YES; }
-    if (!isSiriEnabled             && [iconName isEqualToString:kSiriKey]) { return YES; }
-    if (!isVpnEnabled              && [iconName isEqualToString:kVpnKey]) { return YES; }
-    if (!isCallForwardEnabled      && [iconName isEqualToString:kCallForwardKey]) { return YES; }
-    if (!isActivityEnabled         && [iconName isEqualToString:kActivityKey]) { return YES; }
-    if (!isThermalColorEnabled     && [iconName isEqualToString:kThermalColorKey]) { return YES; }
+    if (!isAirPlayEnabled           && [iconName isEqualToString:kAirPlayKey]) { return YES; }
+    if (!isSiriEnabled              && [iconName isEqualToString:kSiriKey]) { return YES; }
+    if (!isVpnEnabled               && [iconName isEqualToString:kVpnKey]) { return YES; }
+    if (!isCallForwardEnabled       && [iconName isEqualToString:kCallForwardKey]) { return YES; }
+    if (!isActivityEnabled          && [iconName isEqualToString:kActivityKey]) { return YES; }
+    if (!isThermalColorEnabled      && [iconName isEqualToString:kThermalColorKey]) { return YES; }
+    if (!isQuietModeInactiveEnabled && [iconName isEqualToString:kQuietModeInactiveKey]) { return YES; }
+    if (!isTetheringCCEnabled       && [iconName isEqualToString:kTetheringCCKey]) { return YES; }
     return NO;
 }
 
 static inline void SetStatusBarDate(id self, BOOL isContainDate)
 {
     // NOTE: iOS 4, 5 assertion failer fix.
-    if (!self)
-        self = [%c(SBStatusBarDataManager) sharedDataManager];
-    NSDateFormatter *dateFormatter = MSHookIvar<NSDateFormatter *>(self, "_timeItemDateFormatter");
+    if (!self) {
+        if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_7_0)
+            self = [%c(SBStatusBarStateAggregator) sharedInstance];
+        else
+            self = [%c(SBStatusBarDataManager) sharedDataManager];
+    }
+
+    // NSDateFormatter *dateFormatter = MSHookIvar<NSDateFormatter *>(self, "_timeItemDateFormatter");
+
+    NSDateFormatter *dateFormatter;
+    object_getInstanceVariable(self, "_timeItemDateFormatter", (void**)&dateFormatter);
+
     [dateFormatter setLocale:[[[NSLocale alloc] initWithLocaleIdentifier:formatLang] autorelease]];
     NSRange range = [customDateFormat rangeOfString:@"FM" options:NSLiteralSearch];
     if (isContainDate && range.location != NSNotFound) {
@@ -215,13 +242,16 @@ static inline void SetStatusBarDate(id self, BOOL isContainDate)
         // default = H:mm
         [dateFormatter setDateFormat:(isContainDate ? customDateFormat : @"H:mm")];
     }
-    [self _updateTimeString];
+    if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_7_0)
+        [self _updateTimeItems];
+    else
+        [self _updateTimeString];
 }
 
 static inline void DEBUG()
 {
     for (int i=0; i<50; i++) {
-        NSLog(@"%@", [%c(UIStatusBarItem) itemWithType:i]);
+        NSLog(@"%@", [%c(UIStatusBarItem) itemWithType:i idiom:0]);
     }
 }
 
@@ -229,11 +259,14 @@ static inline void DisableItemFromString(NSString *string)
 {
     // NOTE: 50 is hard-coding. Now 24 items exist on iOS 6.1
     for (int i=0; i<50; i++) {
-        UIStatusBarItem *item = [%c(UIStatusBarItem) itemWithType:i];
+        UIStatusBarItem *item = [%c(UIStatusBarItem) itemWithType:i idiom:0];
         if (!item)
             break;
         if ([IconNameFromItem(item) isEqualToString:string]) {
-            [[%c(SBStatusBarDataManager) sharedDataManager] setStatusBarItem:i enabled:NO];
+            if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_7_0)
+                [[%c(SBStatusBarStateAggregator) sharedInstance] _setItem:i enabled:NO];
+            else
+                [[%c(SBStatusBarDataManager) sharedDataManager] setStatusBarItem:i enabled:NO];
             break;
         }
     }
@@ -260,20 +293,49 @@ static inline void DisableItemFromString(NSString *string)
 }
 %end
 
+%hook SBStatusBarStateAggregator
+- (BOOL)_setItem:(int)item enabled:(BOOL)enabled
+{
+    if (isDisabledStatus([%c(UIStatusBarItem) itemWithType:item idiom:0]))
+        return %orig(item, NO);
+    return %orig;
+}
+
+- (void)_configureTimeItemDateFormatter
+{
+    %orig;
+    SetStatusBarDate(self, isDateTimeStatusBar);
+}
+
+%new(v@:)
+- (void)updateTimeStringWithMemory
+{
+    SetStatusBarDate(self, isDateTimeStatusBar);
+}
+%end
+
 static inline void UpdateAllItems()
 {
-    SBStatusBarDataManager *manager = [%c(SBStatusBarDataManager) sharedDataManager];
+    id manager = nil;
+    if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_7_0)
+        manager = [%c(SBStatusBarStateAggregator) sharedInstance];
+    else
+        manager = [%c(SBStatusBarDataManager) sharedDataManager];
+    
     for (NSInteger i=0; i<50; i++) {
         if ([%c(UIStatusBarItem) typeIsValid:i]) {
-            Log(@"%d is valid", i);
+            NSLog(@"%d is valid", i);
             [manager updateStatusBarItem:i];
         } else {
-            Log(@"%d is NON valid", i);
+            NSLog(@"%d is NON valid", i);
             break;
         }
     }
     // hard-coding: TimeItem will not appear by [manager updateStatusBarItem:0];
-    [manager setStatusBarItem:0 enabled:isTimeEnabled];
+    if (kCFCoreFoundationVersionNumber >= kCFCoreFoundationVersionNumber_iOS_7_0)
+        [manager _setItem:0 enabled:isTimeEnabled];
+    else
+        [manager setStatusBarItem:0 enabled:isTimeEnabled];
 }
 
 #define PREF_PATH @"/var/mobile/Library/Preferences/jp.r-plus.CloakStatus.plist"
@@ -306,6 +368,8 @@ static void LoadSettings()
     id callForwardPref            = [dict objectForKey:kCallForwardKey];
     id activityPref               = [dict objectForKey:kActivityKey];
     id thermalColorPref           = [dict objectForKey:kThermalColorKey];
+    id quietModeInactivePref      = [dict objectForKey:kQuietModeInactiveKey];
+    id tetheringCCPref            = [dict objectForKey:kTetheringCCKey];
 
     // DateTimeStatusBar
     id dateTimeStatusBarPref = [dict objectForKey:@"DateTimeStatusBar"];
@@ -320,6 +384,7 @@ static void LoadSettings()
     customDateFormat = customDateFormatPref ? [customDateFormatPref copy] : @"M/d H:mm";
 
     if (isBootup) {
+        SetStatusBarDate(nil, isDateTimeStatusBar);
         isTimeEnabled = timePref ? [timePref boolValue] : YES;
         isLockEnabled = lockPref ? [lockPref boolValue] : YES;
         isQuitEnabled = quitPref ? [quitPref boolValue] : YES;
@@ -345,6 +410,8 @@ static void LoadSettings()
         isCallForwardEnabled = callForwardPref ? [callForwardPref boolValue] : YES;
         isActivityEnabled = activityPref ? [activityPref boolValue] : YES;
         isThermalColorEnabled = thermalColorPref ? [thermalColorPref boolValue] : YES;
+        isQuietModeInactiveEnabled = quietModeInactivePref ? [quietModeInactivePref boolValue] : YES;
+        isTetheringCCEnabled = tetheringCCPref ? [tetheringCCPref boolValue] : YES;
     } else {
         SetStatusBarDate(nil, isDateTimeStatusBar);
         // Detect what setting is changed.
@@ -373,6 +440,8 @@ static void LoadSettings()
         BOOL isTmpCallForwardEnabled = callForwardPref ? [callForwardPref boolValue] : YES;
         BOOL isTmpActivityEnabled = activityPref ? [activityPref boolValue] : YES;
         BOOL isTmpThermalColorEnabled = thermalColorPref ? [thermalColorPref boolValue] : YES;
+        BOOL isTmpQuietModeInactiveEnabled = quietModeInactivePref ? [quietModeInactivePref boolValue] : YES;
+        BOOL isTmpTetheringCCEnabled = tetheringCCPref ? [tetheringCCPref boolValue] : YES;
         if (isTimeEnabled != isTmpTimeEnabled) {
             isTimeEnabled = isTmpTimeEnabled;
             if (!isTimeEnabled)
@@ -475,6 +544,14 @@ static void LoadSettings()
             isThermalColorEnabled = isTmpThermalColorEnabled;
             if (!isThermalColorEnabled)
                 DisableItemFromString(kThermalColorKey);
+        } else if (isQuietModeInactiveEnabled != isTmpQuietModeInactiveEnabled) {
+            isQuietModeInactiveEnabled = isTmpQuietModeInactiveEnabled;
+            if (!isQuietModeInactiveEnabled)
+                DisableItemFromString(kQuietModeInactiveKey);
+        } else if (isTetheringCCEnabled != isTmpTetheringCCEnabled) {
+            isTetheringCCEnabled = isTmpTetheringCCEnabled;
+            if (!isTetheringCCEnabled)
+                DisableItemFromString(kTetheringCCKey);
         }
 
         UpdateAllItems();
