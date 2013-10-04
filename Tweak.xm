@@ -36,15 +36,18 @@ typedef struct {
 } _rawData;
 
 
-@interface SBStatusBarStateAggregator : NSObject
+@interface SBStatusBarDataManager : NSObject
 + (id)sharedDataManager;
 - (void)_updateTimeString;
 - (void)setStatusBarItem:(int)item enabled:(BOOL)enabled;
 - (void)updateStatusBarItem:(int)item;
+@end
 
+@interface SBStatusBarStateAggregator : NSObject
++ (id)sharedInstance;
 - (void)_updateTimeItems;
 - (void)_setItem:(int)item enabled:(BOOL)enabled;
-+ (id)sharedInstance;// iOS 7+
+- (void)updateStatusBarItem:(int)item;
 @end
 
 @interface UIStatusBarItem
